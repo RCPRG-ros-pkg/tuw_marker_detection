@@ -67,9 +67,14 @@ void CheckerboardNode::callbackConfig ( tuw_checkerboard::CheckerboardDetectionC
     config_ = _config;
 
     object_corners_.clear();
+    cv::Point3f offset(0, 0, 0);
+    if (config_.center_frame) {
+        offset.y = - ( 0.5 * (config_.checkerboard_columns - 1) * config_.checkerboard_square_size);
+        offset.x = - ( 0.5 * (config_.checkerboard_rows - 1) * config_.checkerboard_square_size);
+    }
     for ( int i = 0; i < config_.checkerboard_rows; i++ ) {
         for ( int j = 0; j < config_.checkerboard_columns; j++ ) {
-            object_corners_.push_back ( Point3f ( float ( i * config_.checkerboard_square_size ), float ( j * config_.checkerboard_square_size ), 0.f ) );
+            object_corners_.push_back ( Point3f ( float ( i * config_.checkerboard_square_size ), float ( j * config_.checkerboard_square_size ), 0.f ) + offset);
         }
     }
 }
@@ -97,13 +102,26 @@ void CheckerboardNode::callbackCamera ( const sensor_msgs::ImageConstPtr& image_
     }
 
 
+    cv::Mat image_scaled;
+    if (config_.scale_factor > 1) {
+        float fs = 1.0 / config_.scale_factor;
+        cv::resize(image_grey_, image_scaled, cv::Size(), fs, fs);
+    } else {
+        image_scaled = image_grey_;
+    }
 
     int flags = 0;
     if ( config_.adaptive_thresh ) flags += CV_CALIB_CB_ADAPTIVE_THRESH;
     if ( config_.normalize_image ) flags += CV_CALIB_CB_NORMALIZE_IMAGE;
     if ( config_.filter_quads ) flags += CV_CALIB_CB_FILTER_QUADS;
     if ( config_.fast_check ) flags += CALIB_CB_FAST_CHECK;
-    bool patternfound = findChessboardCorners ( image_grey_, patternsize, image_corners_, flags );
+    bool patternfound = findChessboardCorners ( image_scaled, patternsize, image_corners_, flags );
+
+
+    if (config_.scale_factor > 1) {
+        for (auto & c : image_corners_)
+            c = c * config_.scale_factor;
+    }
 
     if ( patternfound ) {
         if ( config_.subpixelfit ) {
